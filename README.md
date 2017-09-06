@@ -1,57 +1,53 @@
-# Project Name
+---
+services: Network
+platforms: .Net
+author: lenala
+---
 
-(short, 1-3 sentenced, description of the project)
+# Getting Started with Network - Manage Network Watcher - in .Net #
 
-## Features
-
-This project framework provides the following features:
-
-* Feature 1
-* Feature 2
-* ...
-
-## Getting Started
-
-### Prerequisites
-
-(ideally very short, if any)
-
-- OS
-- Library version
-- ...
-
-### Installation
-
-(ideally very short)
-
-- npm install [package name]
-- mvn install
-- ...
-
-### Quickstart
-(Add steps to get up and running quickly)
-
-1. git clone [repository clone url]
-2. cd [respository name]
-3. ...
+          Azure Network sample for managing network watcher -
+           - Create Network Watcher
+         	- Manage packet capture – track traffic to and from a virtual machine
+            	Create a VM
+               Start a packet capture
+               Stop a packet capture
+               Get a packet capture
+               Delete a packet capture
+           - Verify IP flow – verify if traffic is allowed to or from a virtual machine
+               Get the IP address of a NIC on a virtual machine
+               Test IP flow on the NIC
+           - Analyze next hop – get the next hop type and IP address for a virtual machine
+           - Retrieve network topology for a resource group
+           - Analyze Virtual Machine Security by examining effective network security rules applied to a VM
+               Get security group view for the VM
+           - Configure Network Security Group Flow Logs
+               Get flow log settings
+               Enable NSG flow log
+               Disable NSG flow log
+           - Delete network watcher
 
 
-## Demo
+## Running this Sample ##
 
-A demo app is included to show how to use the project.
+To run this sample:
 
-To run the demo, follow these steps:
+Set the environment variable `AZURE_AUTH_LOCATION` with the full path for an auth file. See [how to create an auth file](https://github.com/Azure/azure-sdk-for-net/blob/Fluent/AUTH.md).
 
-(Add steps to start up the demo)
+    git clone https://github.com/Azure-Samples/network-dotnet-use-new-watcher.git
 
-1.
-2.
-3.
+    cd network-dotnet-use-new-watcher
 
-## Resources
+    dotnet restore
 
-(Any additional resources or related projects)
+    dotnet run
 
-- Link to supporting information
-- Link to similar sample
-- ...
+## More information ##
+
+[Azure Management Libraries for C#](https://github.com/Azure/azure-sdk-for-net/tree/Fluent)
+[Azure .Net Developer Center](https://azure.microsoft.com/en-us/develop/net/)
+If you don't have a Microsoft Azure subscription you can get a FREE trial account [here](http://go.microsoft.com/fwlink/?LinkId=330212)
+
+---
+
+This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/). For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
