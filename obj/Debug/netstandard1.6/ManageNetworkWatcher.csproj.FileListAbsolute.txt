@@ -1,2 +1,0 @@
-C:\Sources\dotnet-samples\network-dotnet-use-new-watcher\bin\Debug\netstandard1.6\ManageNetworkWatcher.deps.json
-C:\Sources\dotnet-samples\network-dotnet-use-new-watcher\obj\Debug\netstandard1.6\ManageNetworkWatcher.csproj.CoreCompileInputs.cache

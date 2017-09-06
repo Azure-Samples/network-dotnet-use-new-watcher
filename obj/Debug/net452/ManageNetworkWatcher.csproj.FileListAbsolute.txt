@@ -1,4 +1,0 @@
-C:\Sources\dotnet-samples\network-dotnet-use-new-watcher\bin\Debug\net452\ManageNetworkWatcher.runtimeconfig.json
-C:\Sources\dotnet-samples\network-dotnet-use-new-watcher\bin\Debug\net452\ManageNetworkWatcher.runtimeconfig.dev.json
-C:\Sources\dotnet-samples\network-dotnet-use-new-watcher\obj\Debug\net452\ManageNetworkWatcher.csproj.ManageNetworkWatcher.exe.config
-C:\Sources\dotnet-samples\network-dotnet-use-new-watcher\obj\Debug\net452\ManageNetworkWatcher.csproj.CoreCompileInputs.cache
