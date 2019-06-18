@@ -1,7 +1,7 @@
 ---
 services: network-watcher
 platforms: dotnet
-author: lenala
+author: yaohaizh
 ---
 
 # Getting started on using network watcher in C# #
@@ -32,7 +32,7 @@ author: lenala
 
 To run this sample:
 
-Set the environment variable `AZURE_AUTH_LOCATION` with the full path for an auth file. See [how to create an auth file](https://github.com/Azure/azure-libraries-for-java/blob/master/AUTH.md).
+Set the environment variable `AZURE_AUTH_LOCATION` with the full path for an auth file. See [how to create an auth file](https://github.com/Azure/azure-libraries-for-net/blob/master/AUTH.md).
 
     git clone https://github.com/Azure-Samples/network-dotnet-use-new-watcher.git
 
