@@ -1,7 +1,9 @@
 ---
 page_type: sample
-languages: java
-products: azure
+languages:
+- java
+products:
+- azure
 services: network-watcher
 platforms: dotnet
 author: yaohaizh
@@ -40,9 +42,9 @@ Set the environment variable `AZURE_AUTH_LOCATION` with the full path for an aut
     git clone https://github.com/Azure-Samples/network-dotnet-use-new-watcher.git
 
     cd network-dotnet-use-new-watcher
-  
+
     dotnet build
-    
+
     bin\Debug\net452\ManageNetworkWatcher.exe
 
 ## More information ##
