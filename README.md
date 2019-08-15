@@ -4,33 +4,33 @@ languages:
 - csharp
 products:
 - azure
-services: network-watcher
-platforms: dotnet
-author: yaohaizh
+extensions:
+- services: network-watcher
+- platforms: dotnet
 ---
 
 # Getting started on using network watcher in C# #
 
-          Azure Network sample for managing network watcher -
-           - Create Network Watcher
-         	- Manage packet capture – track traffic to and from a virtual machine
-            	Create a VM
-               Start a packet capture
-               Stop a packet capture
-               Get a packet capture
-               Delete a packet capture
-           - Verify IP flow – verify if traffic is allowed to or from a virtual machine
-               Get the IP address of a NIC on a virtual machine
-               Test IP flow on the NIC
-           - Analyze next hop – get the next hop type and IP address for a virtual machine
-           - Retrieve network topology for a resource group
-           - Analyze Virtual Machine Security by examining effective network security rules applied to a VM
-               Get security group view for the VM
-           - Configure Network Security Group Flow Logs
-               Get flow log settings
-               Enable NSG flow log
-               Disable NSG flow log
-           - Delete network watcher
+ Azure Network sample for managing network watcher -
+  - Create Network Watcher
+	- Manage packet capture – track traffic to and from a virtual machine
+   	Create a VM
+      Start a packet capture
+      Stop a packet capture
+      Get a packet capture
+      Delete a packet capture
+  - Verify IP flow – verify if traffic is allowed to or from a virtual machine
+      Get the IP address of a NIC on a virtual machine
+      Test IP flow on the NIC
+  - Analyze next hop – get the next hop type and IP address for a virtual machine
+  - Retrieve network topology for a resource group
+  - Analyze Virtual Machine Security by examining effective network security rules applied to a VM
+      Get security group view for the VM
+  - Configure Network Security Group Flow Logs
+      Get flow log settings
+      Enable NSG flow log
+      Disable NSG flow log
+  - Delete network watcher
 
 
 ## Running this Sample ##
