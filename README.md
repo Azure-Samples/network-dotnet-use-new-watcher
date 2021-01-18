@@ -5,8 +5,8 @@ languages:
 products:
 - azure
 extensions:
-- services: network-watcher
-- platforms: dotnet
+  services: network-watcher
+  platforms: dotnet
 ---
 
 # Getting started on using network watcher in C# #
