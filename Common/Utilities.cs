@@ -96,7 +96,7 @@ namespace Azure.ResourceManager.Samples.Common
                             PrivateIPAllocationMethod = NetworkIPAllocationMethod.Dynamic,
                             Subnet = new SubnetData()
                             {
-                                Id = vnet.Data.Subnets.First(item => item.Name != "GatewaySubnet").Id
+                                Id = vnet.Data.Subnets.First().Id
                             }
                         }
                     }

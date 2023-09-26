@@ -47,17 +47,15 @@ namespace ManageNetworkWatcher
          */
         public static async Task RunSample(ArmClient client)
         {
-            string rgName = Utilities.CreateRandomName("rg");
+            string rgName = Utilities.CreateRandomName("NetworkSampleRG");
             string networkWatcherName = Utilities.CreateRandomName("watcher");
             string vnetName = Utilities.CreateRandomName("vnet");
             string nsgName = Utilities.CreateRandomName("nsg");
-            string dnsLabel = Utilities.CreateRandomName("pipdns");
-            string saName = Utilities.CreateRandomName("sa");
+            string storageAccountName = Utilities.CreateRandomName("azstorageaccount");
             string vmName = Utilities.CreateRandomName("vm");
-            string packetCaptureName = Utilities.CreateRandomName("pc");
+            string packetCaptureName = Utilities.CreateRandomName("packetCapture");
             NetworkWatcherResource networkWatcher = null;
 
-            try
             {
                 // Get default subscription
                 SubscriptionResource subscription = await client.GetDefaultSubscriptionAsync();
@@ -112,138 +110,158 @@ namespace ManageNetworkWatcher
                 Utilities.Log("Created a security group for the front end: " + nsg.Data.Name);
 
                 Utilities.Log("Creating virtual network...");
-                ICreatable<INetwork> virtualNetwork = azure.Networks.Define(vnetName)
-                    .WithRegion(region)
-                    .WithExistingResourceGroup(rgName)
-                    .WithAddressSpace("192.168.0.0/16")
-                    .DefineSubnet(subnetName)
-                        .WithAddressPrefix("192.168.2.0/24")
-                        .WithExistingNetworkSecurityGroup(nsg)
-                        .Attach();
+                VirtualNetworkData vnetInput = new VirtualNetworkData()
+                {
+                    Location = resourceGroup.Data.Location,
+                    AddressPrefixes = { "192.168.0.0/16" },
+                    Subnets =
+                    {
+                        new SubnetData() { AddressPrefix = "192.168.2.0/24", Name = "default" , NetworkSecurityGroup = nsg.Data},
+                    },
+                };
+                var vnetLro = await resourceGroup.GetVirtualNetworks().CreateOrUpdateAsync(WaitUntil.Completed, vnetName, vnetInput);
+                VirtualNetworkResource vnet = vnetLro.Value;
+                Utilities.Log($"Created a virtual network: {vnet.Data.Name}");
+
                 Utilities.Log("Creating virtual machine...");
-                IVirtualMachine vm = azure.VirtualMachines.Define(vmName)
-                    .WithRegion(region)
-                    .WithExistingResourceGroup(rgName)
-                    .WithNewPrimaryNetwork(virtualNetwork)
-                    .WithPrimaryPrivateIPAddressDynamic()
-                    .WithNewPrimaryPublicIPAddress(dnsLabel)
-                    .WithPopularLinuxImage(KnownLinuxVirtualMachineImage.UbuntuServer14_04_Lts)
-                    .WithRootUsername(userName)
-                    .WithRootPassword("Abcdef.123456")
-                    .WithSize(VirtualMachineSizeTypes.Parse("Standard_D2a_v4"))
-                    .DefineNewExtension("packetCapture")
-                        .WithPublisher("Microsoft.Azure.NetworkWatcher")
-                        .WithType("NetworkWatcherAgentLinux")
-                        .WithVersion("1.4")
-                        .WithMinorVersionAutoUpgrade()
-                        .Attach()
-                    .Create();
+                // Definate vm extension input data
+                string extensionName = "packetCapture";
+                var extensionInput = new VirtualMachineExtensionData(resourceGroup.Data.Location)
+                {
+                    Publisher = "Microsoft.Azure.NetworkWatcher",
+                    ExtensionType = "NetworkWatcherAgentWindows",
+                    TypeHandlerVersion = "1.4",
+                    AutoUpgradeMinorVersion = true,
+                };
+                // Create vm
+                NetworkInterfaceResource nic = await Utilities.CreateNetworkInterface(resourceGroup, vnet);
+                VirtualMachineData vmInput = Utilities.GetDefaultVMInputData(resourceGroup, vmName);
+                vmInput.NetworkProfile.NetworkInterfaces.Add(new VirtualMachineNetworkInterfaceReference() { Id = nic.Id, Primary = true });
+                var vmLro = await resourceGroup.GetVirtualMachines().CreateOrUpdateAsync(WaitUntil.Completed, vmName, vmInput);
+                VirtualMachineResource vm = vmLro.Value;
+                _ = await vm.GetVirtualMachineExtensions().CreateOrUpdateAsync(WaitUntil.Completed, extensionName, extensionInput);
+                Utilities.Log($"Created vm: {vm.Data.Name}");
 
                 // Create storage account
                 Utilities.Log("Creating storage account...");
-                IStorageAccount storageAccount = azure.StorageAccounts.Define(saName)
-                    .WithRegion(region)
-                    .WithExistingResourceGroup(rgName)
-                    .Create();
+                StorageSku storageSku = new StorageSku(StorageSkuName.StandardGrs);
+                StorageKind storageKind = StorageKind.Storage;
+                StorageAccountCreateOrUpdateContent storagedata = new StorageAccountCreateOrUpdateContent(storageSku, storageKind, resourceGroup.Data.Location) { };
+                var storageAccountLro = await resourceGroup.GetStorageAccounts().CreateOrUpdateAsync(WaitUntil.Completed, storageAccountName, storagedata);
+                StorageAccountResource storageAccount = storageAccountLro.Value;
+                Utilities.Log($"Created storage account: {storageAccount.Data.Name}");
 
                 // Start a packet capture
                 Utilities.Log("Creating packet capture...");
-                IPacketCapture packetCapture = nw.PacketCaptures
-                    .Define(packetCaptureName)
-                    .WithTarget(vm.Id)
-                    .WithStorageAccountId(storageAccount.Id)
-                    .WithTimeLimitInSeconds(1500)
-                    .DefinePacketCaptureFilter()
-                        .WithProtocol(PcProtocol.TCP)
-                        .Attach()
-                    .Create();
-                Utilities.Log("Created packet capture");
-                Utilities.Print(packetCapture);
+                PacketCaptureStorageLocation packetCaptureStorageLocation = new PacketCaptureStorageLocation()
+                {
+                    StorageId = storageAccount.Id,
+                };
+                PacketCaptureCreateOrUpdateContent packetCaptureInput = new PacketCaptureCreateOrUpdateContent(vm.Id.ToString(), packetCaptureStorageLocation)
+                {
+                    TimeLimitInSeconds = 1500,
+                    Filters = { new PacketCaptureFilter() { Protocol = PcProtocol.Tcp } }
+                };
+                var packetCaptureLro = await networkWatcher.GetPacketCaptures().CreateOrUpdateAsync(WaitUntil.Completed, packetCaptureName, packetCaptureInput);
+                PacketCaptureResource packetCapture = packetCaptureLro.Value;
+                Utilities.Log($"Created packet capture: {packetCapture.Data.Name}");
 
                 // Stop a packet capture
                 Utilities.Log("Stopping packet capture...");
-                packetCapture.Stop();
-                Utilities.Print(packetCapture);
+                await packetCapture.StopAsync(WaitUntil.Completed);
 
                 // Get a packet capture
                 Utilities.Log("Getting packet capture...");
-                IPacketCapture packetCapture1 = nw.PacketCaptures.GetByName(packetCaptureName);
-                Utilities.Print(packetCapture1);
+                var getPackketCaptureLro = await networkWatcher.GetPacketCaptures().GetAsync(packetCaptureName);
+                PacketCaptureResource getPackketCapture = getPackketCaptureLro.Value;
 
                 // Delete a packet capture
                 Utilities.Log("Deleting packet capture");
-                nw.PacketCaptures.DeleteByName(packetCapture.Name);
+                await packetCapture.DeleteAsync(WaitUntil.Completed);
 
                 //============================================================
                 // Verify IP flow – verify if traffic is allowed to or from a virtual machine
                 // Get the IP address of a NIC on a virtual machine
-                String ipAddress = vm.GetPrimaryNetworkInterface().PrimaryPrivateIP;
+                string ipAddress = nic.Data.IPConfigurations.First().PrivateIPAddress;
                 // Test IP flow on the NIC
                 Utilities.Log("Verifying IP flow for vm id " + vm.Id + "...");
-                IVerificationIPFlow verificationIPFlow = nw.VerifyIPFlow()
-                    .WithTargetResourceId(vm.Id)
-                    .WithDirection(Direction.Outbound)
-                    .WithProtocol(IpFlowProtocol.TCP)
-                    .WithLocalIPAddress(ipAddress)
-                    .WithRemoteIPAddress("8.8.8.8")
-                    .WithLocalPort("443")
-                    .WithRemotePort("443")
-                    .Execute();
-                Utilities.Print(verificationIPFlow);
+                VerificationIPFlowContent verificationIPFlowInput = new VerificationIPFlowContent(
+                    targetResourceId: vm.Id,
+                    direction: NetworkTrafficDirection.Outbound,
+                    protocol: IPFlowProtocol.Tcp,
+                    localPort: "443",
+                    remotePort: "443",
+                    localIPAddress: ipAddress,
+                    remoteIPAddress: "8.8.8.8"
+                    );
+                var verificationIPFlowResult = await networkWatcher.VerifyIPFlowAsync(WaitUntil.Completed, verificationIPFlowInput);
+                Utilities.Log("Access: " + verificationIPFlowResult.Value.Access);
+                Utilities.Log("RuleName: " + verificationIPFlowResult.Value.RuleName);
 
                 //============================================================
                 // Analyze next hop – get the next hop type and IP address for a virtual machine
                 Utilities.Log("Calculating next hop...");
-                INextHop nextHop = nw.NextHop().WithTargetResourceId(vm.Id)
-                    .WithSourceIPAddress(ipAddress)
-                    .WithDestinationIPAddress("8.8.8.8")
-                    .Execute();
-                Utilities.Print(nextHop);
+                NextHopContent nextHopContent = new NextHopContent(
+                    targetResourceId: vm.Id,
+                    sourceIPAddress: ipAddress,
+                    destinationIPAddress: "8.8.8.8");
+                var nextHopResult = await networkWatcher.GetNextHopAsync(WaitUntil.Completed, nextHopContent);
+                Utilities.Log("NextHopType: " + nextHopResult.Value.NextHopType);
 
                 //============================================================
                 // Retrieve network topology for a resource group
                 Utilities.Log("Getting topology...");
-                ITopology topology = nw.Topology()
-                    .WithTargetResourceGroup(rgName)
-                    .Execute();
-                Utilities.Print(topology);
+                TopologyContent topologyContent = new TopologyContent();
+                var topologyResult = await networkWatcher.GetTopologyAsync(topologyContent);
+                Utilities.Log("Resources count: " + topologyResult.Value.Resources.Count);
 
                 //============================================================
                 // Analyze Virtual Machine Security by examining effective network security rules applied to a VM
                 // Get security group view for the VM
                 Utilities.Log("Getting security group view for a vm");
-                ISecurityGroupView sgViewResult = nw.GetSecurityGroupView(vm.Id);
-                Utilities.Print(sgViewResult);
+                SecurityGroupViewContent securityGroupViewContent = new SecurityGroupViewContent(vm.Id);
+                var vmSecurityRulesResult = await networkWatcher.GetVmSecurityRulesAsync(WaitUntil.Completed, securityGroupViewContent);
+                Utilities.Log("NetworkInterfaces count: " + vmSecurityRulesResult.Value.NetworkInterfaces.Count);
 
                 //============================================================
                 // Configure Network Security Group Flow Logs
 
                 // Get flow log settings
-                IFlowLogSettings flowLogSettings = nw.GetFlowLogSettings(nsg.Id);
-                Utilities.Print(flowLogSettings);
+                FlowLogInformation flowLogInformationInput = new FlowLogInformation(
+                    targetResourceId: nsg.Id,
+                    storageId: storageAccount.Id,
+                    enabled: true);
+                var flowLogLroInformation = await networkWatcher.SetFlowLogConfigurationAsync(WaitUntil.Completed, flowLogInformationInput);
+                FlowLogInformation flowLogInformation = flowLogLroInformation.Value;
+                Utilities.Log("TargetResourceId: " + flowLogInformation.TargetResourceId);
+                Utilities.Log("Enabled: " + flowLogInformation.Enabled);
 
                 // Enable NSG flow log
-                flowLogSettings.Update()
-                    .WithLogging()
-                    .WithStorageAccount(storageAccount.Id)
-                    .WithRetentionPolicyDays(5)
-                    .WithRetentionPolicyEnabled()
-                    .Apply();
-                Utilities.Print(flowLogSettings);
+                string flowLogName = "flowlog";
+                FlowLogData flowLogInput = new FlowLogData()
+                {
+                    TargetResourceId = nsg.Id,
+                    StorageId = storageAccount.Id,
+                    RetentionPolicy = new RetentionPolicyParameters() { Days = 5, Enabled = true },
+                    Enabled = true,
+                };
+                var flowLogLro = await networkWatcher.GetFlowLogs().CreateOrUpdateAsync(WaitUntil.Completed, flowLogName, flowLogInput);
+                var flowlog = flowLogLro.Value;
+                Utilities.Log("Enabled" + flowlog.Data.Enabled);
 
                 // Disable NSG flow log
-                flowLogSettings.Update()
-                    .WithoutLogging()
-                    .Apply();
-                Utilities.Print(flowLogSettings);
+                flowLogInput = flowlog.Data;
+                flowLogInput.Enabled = false;
+                flowLogLro = await networkWatcher.GetFlowLogs().CreateOrUpdateAsync(WaitUntil.Completed, flowLogName, flowLogInput);
+                flowlog = flowLogLro.Value;
+                Utilities.Log("Enabled" + flowlog.Data.Enabled);
 
                 //============================================================
                 // Delete network watcher
                 Utilities.Log("Deleting network watcher");
-                azure.NetworkWatchers.DeleteById(nw.Id);
+                await networkWatcher.DeleteAsync(WaitUntil.Completed);
                 Utilities.Log("Deleted network watcher");
             }
-            finally
             {
                 try
                 {
@@ -273,18 +291,19 @@ namespace ManageNetworkWatcher
 
         public static async Task Main(string[] args)
         {
+            var clientId = Environment.GetEnvironmentVariable("CLIENT_ID");
+            var clientSecret = Environment.GetEnvironmentVariable("CLIENT_SECRET");
+            var tenantId = Environment.GetEnvironmentVariable("TENANT_ID");
+            var subscription = Environment.GetEnvironmentVariable("SUBSCRIPTION_ID");
+            ClientSecretCredential credential = new ClientSecretCredential(tenantId, clientId, clientSecret);
+            ArmClient client = new ArmClient(credential, subscription);
+
+            await RunSample(client);
             try
             {
                 //=================================================================
                 // Authenticate
-                var clientId = Environment.GetEnvironmentVariable("CLIENT_ID");
-                var clientSecret = Environment.GetEnvironmentVariable("CLIENT_SECRET");
-                var tenantId = Environment.GetEnvironmentVariable("TENANT_ID");
-                var subscription = Environment.GetEnvironmentVariable("SUBSCRIPTION_ID");
-                ClientSecretCredential credential = new ClientSecretCredential(tenantId, clientId, clientSecret);
-                ArmClient client = new ArmClient(credential, subscription);
 
-                await RunSample(client);
             }
             catch (Exception ex)
             {
