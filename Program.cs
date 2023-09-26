@@ -1,29 +1,27 @@
 ﻿// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Microsoft.Azure.Management.Compute.Fluent;
-using Microsoft.Azure.Management.Compute.Fluent.Models;
-using Microsoft.Azure.Management.Fluent;
-using Microsoft.Azure.Management.Network.Fluent;
-using Microsoft.Azure.Management.Network.Fluent.Models;
-using Microsoft.Azure.Management.ResourceManager.Fluent;
-using Microsoft.Azure.Management.ResourceManager.Fluent.Core;
-using Microsoft.Azure.Management.ResourceManager.Fluent.Core.ResourceActions;
-using Microsoft.Azure.Management.Samples.Common;
-using Microsoft.Azure.Management.Storage.Fluent;
+using Azure;
+using Azure.Core;
+using Azure.Identity;
+using Azure.ResourceManager.Resources.Models;
+using Azure.ResourceManager.Samples.Common;
+using Azure.ResourceManager.Resources;
+using Azure.ResourceManager;
+using Azure.ResourceManager.Network;
+using Azure.ResourceManager.Network.Models;
+using Azure.ResourceManager.Storage.Models;
+using Azure.ResourceManager.Storage;
+using Microsoft.Identity.Client.Extensions.Msal;
+using Azure.ResourceManager.Compute.Models;
+using Azure.ResourceManager.Compute;
+
 
 namespace ManageNetworkWatcher
 {
     public class Program
     {
-        private static readonly string ResourceGroupName = SdkContext.RandomResourceName("rgNEMV", 24);
-        private static readonly Region region = Region.USWestCentral;
+        private static ResourceIdentifier? _resourceGroupId = null;
 
         /**
          * Azure Network sample for managing network watcher -
@@ -47,51 +45,72 @@ namespace ManageNetworkWatcher
          *      Disable NSG flow log
          *  - Delete network watcher
          */
-        public static void RunSample(IAzure azure)
+        public static async Task RunSample(ArmClient client)
         {
-            string nwName = SdkContext.RandomResourceName("nw", 8);
+            string rgName = Utilities.CreateRandomName("rg");
+            string networkWatcherName = Utilities.CreateRandomName("watcher");
+            string vnetName = Utilities.CreateRandomName("vnet");
+            string nsgName = Utilities.CreateRandomName("nsg");
+            string dnsLabel = Utilities.CreateRandomName("pipdns");
+            string saName = Utilities.CreateRandomName("sa");
+            string vmName = Utilities.CreateRandomName("vm");
+            string packetCaptureName = Utilities.CreateRandomName("pc");
+            NetworkWatcherResource networkWatcher = null;
 
-            string userName = Utilities.CreateUsername();
-            string vnetName = SdkContext.RandomResourceName("vnet", 20);
-            string subnetName = "subnet1";
-            string nsgName = SdkContext.RandomResourceName("nsg", 20);
-            string dnsLabel = SdkContext.RandomResourceName("pipdns", 20);
-            string rgName = SdkContext.RandomResourceName("rg", 24);
-            string saName = SdkContext.RandomResourceName("sa", 24);
-            string vmName = SdkContext.RandomResourceName("vm", 24);
-            string packetCaptureName = SdkContext.RandomResourceName("pc", 8);
-            INetworkWatcher nw = null;
             try
             {
+                // Get default subscription
+                SubscriptionResource subscription = await client.GetDefaultSubscriptionAsync();
+
+                // Create a resource group in the EastUS region
+                Utilities.Log($"Creating resource group...");
+                ArmOperation<ResourceGroupResource> rgLro = await subscription.GetResourceGroups().CreateOrUpdateAsync(WaitUntil.Completed, rgName, new ResourceGroupData(AzureLocation.WestUS));
+                ResourceGroupResource resourceGroup = rgLro.Value;
+                _resourceGroupId = resourceGroup.Id;
+                Utilities.Log("Created a resource group with name: " + resourceGroup.Data.Name);
+
                 //============================================================
                 // Create network watcher
-                Utilities.Log("Creating network watcher...");
-                nw = azure.NetworkWatchers.Define(nwName)
-                    .WithRegion(region)
-                    .WithNewResourceGroup()
-                    .Create();
-
-                Utilities.Log("Created network watcher");
-                // Print the network watcher
-                Utilities.Print(nw);
+                Utilities.Log($"Create a network watcher in {resourceGroup.Data.Location}...");
+                Utilities.Log("To note: one subscription only has a Network Watcher in the same region");
+                Utilities.Log($"         make sure there has not Network Watcher in {resourceGroup.Data.Location}");
+                NetworkWatcherData networkWatcherInput = new NetworkWatcherData()
+                {
+                    Location = resourceGroup.Data.Location,
+                };
+                var networkWatcherLro = await resourceGroup.GetNetworkWatchers().CreateOrUpdateAsync(WaitUntil.Completed, networkWatcherName, networkWatcherInput);
+                networkWatcher = networkWatcherLro.Value;
+                Utilities.Log($"Created network watcher: {networkWatcher.Data.Name}");
 
                 //============================================================
                 // Manage packet capture – track traffic to and from a virtual machine
 
                 // Create network security group, virtual network and VM; add packetCapture extension to enable packet capture
                 Utilities.Log("Creating network security group...");
-                INetworkSecurityGroup nsg = azure.NetworkSecurityGroups.Define(nsgName)
-                    .WithRegion(region)
-                    .WithNewResourceGroup(rgName)
-                    .DefineRule("DenyInternetInComing")
-                        .DenyInbound()
-                        .FromAddress("INTERNET")
-                        .FromAnyPort()
-                        .ToAnyAddress()
-                        .ToPort(443)
-                        .WithAnyProtocol()
-                        .Attach()
-                    .Create();
+                NetworkSecurityGroupData nsgInput = new NetworkSecurityGroupData()
+                {
+                    Location = resourceGroup.Data.Location,
+                    SecurityRules =
+                    {
+                        new SecurityRuleData()
+                        {
+                            Name = "DenyInternetInComing",
+                            Description = "Allow SQL",
+                            Access = SecurityRuleAccess.Deny,
+                            Direction = SecurityRuleDirection.Inbound,
+                            SourceAddressPrefix = "*",
+                            SourcePortRange = "*",
+                            DestinationAddressPrefix = "*",
+                            DestinationPortRange = "443",
+                            Priority = 100,
+                            Protocol = SecurityRuleProtocol.Tcp,
+                        },
+                    }
+                };
+                var nsgLro = await resourceGroup.GetNetworkSecurityGroups().CreateOrUpdateAsync(WaitUntil.Completed, nsgName, nsgInput);
+                NetworkSecurityGroupResource nsg = nsgLro.Value;
+                Utilities.Log("Created a security group for the front end: " + nsg.Data.Name);
+
                 Utilities.Log("Creating virtual network...");
                 ICreatable<INetwork> virtualNetwork = azure.Networks.Define(vnetName)
                     .WithRegion(region)
@@ -228,12 +247,17 @@ namespace ManageNetworkWatcher
             {
                 try
                 {
-                    Utilities.Log("Deleting Resource Group: " + rgName);
-                    azure.ResourceGroups.BeginDeleteByName(rgName);
-                    if (nw != null)
+                    if (networkWatcher != null)
                     {
-                        Utilities.Log("Deleting network watcher resource group: " + nw.ResourceGroupName);
-                        azure.ResourceGroups.BeginDeleteByName(nw.ResourceGroupName);
+                        Utilities.Log($"Deleting network watcher...");
+                        await networkWatcher.DeleteAsync(WaitUntil.Completed);
+                        Utilities.Log($"Deleted network watcher {networkWatcher.Data.Name}");
+                    }
+                    if (_resourceGroupId is not null)
+                    {
+                        Utilities.Log($"Deleting Resource Group...");
+                        await client.GetResourceGroupResource(_resourceGroupId).DeleteAsync(WaitUntil.Completed);
+                        Utilities.Log($"Deleted Resource Group: {_resourceGroupId.Name}");
                     }
                 }
                 catch (NullReferenceException)
@@ -247,24 +271,20 @@ namespace ManageNetworkWatcher
             }
         }
 
-        public static void Main(string[] args)
+        public static async Task Main(string[] args)
         {
             try
             {
                 //=================================================================
                 // Authenticate
-                var credentials =
-                    SdkContext.AzureCredentialsFactory.FromFile(
-                        Environment.GetEnvironmentVariable("AZURE_AUTH_LOCATION"));
+                var clientId = Environment.GetEnvironmentVariable("CLIENT_ID");
+                var clientSecret = Environment.GetEnvironmentVariable("CLIENT_SECRET");
+                var tenantId = Environment.GetEnvironmentVariable("TENANT_ID");
+                var subscription = Environment.GetEnvironmentVariable("SUBSCRIPTION_ID");
+                ClientSecretCredential credential = new ClientSecretCredential(tenantId, clientId, clientSecret);
+                ArmClient client = new ArmClient(credential, subscription);
 
-                var azure = Azure.Configure()
-                    .WithLogLevel(HttpLoggingDelegatingHandler.Level.Basic)
-                    .Authenticate(credentials)
-                    .WithDefaultSubscription();
-
-                // Print selected subscription
-                Utilities.Log("Selected subscription: " + azure.SubscriptionId);
-                RunSample(azure);
+                await RunSample(client);
             }
             catch (Exception ex)
             {
