@@ -56,6 +56,7 @@ namespace ManageNetworkWatcher
             string packetCaptureName = Utilities.CreateRandomName("packetCapture");
             NetworkWatcherResource networkWatcher = null;
 
+            try
             {
                 // Get default subscription
                 SubscriptionResource subscription = await client.GetDefaultSubscriptionAsync();
@@ -141,10 +142,12 @@ namespace ManageNetworkWatcher
                 VirtualMachineResource vm = vmLro.Value;
                 _ = await vm.GetVirtualMachineExtensions().CreateOrUpdateAsync(WaitUntil.Completed, extensionName, extensionInput);
                 Utilities.Log($"Created vm: {vm.Data.Name}");
+                Utilities.Log($"Sleep for 3 minutes to wait for VM deployment to complete...");
+                Thread.Sleep(180 * 1000);
 
                 // Create storage account
                 Utilities.Log("Creating storage account...");
-                StorageSku storageSku = new StorageSku(StorageSkuName.StandardGrs);
+                StorageSku storageSku = new StorageSku(StorageSkuName.StandardLrs);
                 StorageKind storageKind = StorageKind.Storage;
                 StorageAccountCreateOrUpdateContent storagedata = new StorageAccountCreateOrUpdateContent(storageSku, storageKind, resourceGroup.Data.Location) { };
                 var storageAccountLro = await resourceGroup.GetStorageAccounts().CreateOrUpdateAsync(WaitUntil.Completed, storageAccountName, storagedata);
@@ -240,6 +243,7 @@ namespace ManageNetworkWatcher
                 string flowLogName = "flowlog";
                 FlowLogData flowLogInput = new FlowLogData()
                 {
+                    Location = resourceGroup.Data.Location,
                     TargetResourceId = nsg.Id,
                     StorageId = storageAccount.Id,
                     RetentionPolicy = new RetentionPolicyParameters() { Days = 5, Enabled = true },
@@ -262,6 +266,7 @@ namespace ManageNetworkWatcher
                 await networkWatcher.DeleteAsync(WaitUntil.Completed);
                 Utilities.Log("Deleted network watcher");
             }
+            finally
             {
                 try
                 {
@@ -291,19 +296,19 @@ namespace ManageNetworkWatcher
 
         public static async Task Main(string[] args)
         {
-            var clientId = Environment.GetEnvironmentVariable("CLIENT_ID");
-            var clientSecret = Environment.GetEnvironmentVariable("CLIENT_SECRET");
-            var tenantId = Environment.GetEnvironmentVariable("TENANT_ID");
-            var subscription = Environment.GetEnvironmentVariable("SUBSCRIPTION_ID");
-            ClientSecretCredential credential = new ClientSecretCredential(tenantId, clientId, clientSecret);
-            ArmClient client = new ArmClient(credential, subscription);
 
-            await RunSample(client);
             try
             {
                 //=================================================================
                 // Authenticate
+                var clientId = Environment.GetEnvironmentVariable("CLIENT_ID");
+                var clientSecret = Environment.GetEnvironmentVariable("CLIENT_SECRET");
+                var tenantId = Environment.GetEnvironmentVariable("TENANT_ID");
+                var subscription = Environment.GetEnvironmentVariable("SUBSCRIPTION_ID");
+                ClientSecretCredential credential = new ClientSecretCredential(tenantId, clientId, clientSecret);
+                ArmClient client = new ArmClient(credential, subscription);
 
+                await RunSample(client);
             }
             catch (Exception ex)
             {
